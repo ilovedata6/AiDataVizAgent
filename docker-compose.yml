@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  ai-viz-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-data-viz-agent
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=development
+      - LOG_LEVEL=INFO
+    volumes:
+      # Mount data directory for persistent storage
+      - ./data:/app/data
+      # Mount logs directory
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - ai-viz-network
+
+networks:
+  ai-viz-network:
+    driver: bridge

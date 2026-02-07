@@ -31,4 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Vector memory service with ChromaDB adapter
 - Streamlit frontend with interactive chat and visualization components
 - Comprehensive test suite with pytest coverage
+- Docker configuration with multi-stage builds
+- GitHub Actions CI/CD pipeline with security scanning
 
