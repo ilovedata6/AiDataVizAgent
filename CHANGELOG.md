@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Initial project structure with uv configuration
+- Centralized configuration with Python 3.12 support
 
 ### Changed
 
