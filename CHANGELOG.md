@@ -37,3 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Complete documentation in first-person (README, ARCHITECTURE, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, SETUP)
 - Git configuration with standard Python ignores
 
+### Fixed
+- Hatchling package configuration to enable wheel building
+
