@@ -26,4 +26,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Data profiling service with auto-recommendations
 - OpenAI client with retry logic and rate limiting
 - Visualization spec planner with LLM-based intent extraction
+- Plotly and Seaborn renderers with safe transformation operations
 
