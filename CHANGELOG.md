@@ -19,3 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-02-07
 
+### Added
+- Structured logging with structlog and sensitive data censorship
+- Custom exception hierarchy for error handling
+
