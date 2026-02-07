@@ -24,4 +24,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom exception hierarchy for error handling
 - Data ingestion service with CSV/XLSX parsing and security validation
 - Data profiling service with auto-recommendations
+- OpenAI client with retry logic and rate limiting
 
