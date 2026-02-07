@@ -30,4 +30,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQL memory service with append-only chat history
 - Vector memory service with ChromaDB adapter
 - Streamlit frontend with interactive chat and visualization components
+- Comprehensive test suite with pytest coverage
 
