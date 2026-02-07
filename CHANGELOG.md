@@ -23,4 +23,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured logging with structlog and sensitive data censorship
 - Custom exception hierarchy for error handling
 - Data ingestion service with CSV/XLSX parsing and security validation
+- Data profiling service with auto-recommendations
 
