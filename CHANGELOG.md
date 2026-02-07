@@ -40,4 +40,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Hatchling package configuration to enable wheel building
 - SQLAlchemy reserved name conflict in Message model
+- OpenAI API parameter compatibility for gpt-5 and gpt-4o models
 
