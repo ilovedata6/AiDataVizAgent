@@ -33,4 +33,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive test suite with pytest coverage
 - Docker configuration with multi-stage builds
 - GitHub Actions CI/CD pipeline with security scanning
+- Development scripts for running app and generating sample data
 
