@@ -240,6 +240,73 @@ class DatasetParser:
                 f"Unsupported file type: .{extension}. Allowed: {', '.join(self.allowed_extensions)}"
             )
 
+    def clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Perform automatic data cleaning before visualization.
+
+        Cleaning steps:
+        1. Strip leading/trailing whitespace from column names.
+        2. Strip whitespace from string (object) columns.
+        3. Drop rows that are entirely empty.
+        4. Drop columns that are entirely empty.
+        5. Attempt to coerce 'object' columns that look numeric to numeric types.
+        6. Parse columns that look like dates.
+
+        Args:
+            df: Raw parsed DataFrame
+
+        Returns:
+            Cleaned DataFrame (copy — original is not mutated)
+        """
+        original_shape = df.shape
+        df = df.copy()
+
+        # 1. Clean column names
+        df.columns = [str(c).strip() for c in df.columns]
+
+        # 2. Strip whitespace from string columns
+        str_cols = df.select_dtypes(include=["object"]).columns
+        for col in str_cols:
+            df[col] = df[col].map(lambda v: v.strip() if isinstance(v, str) else v)
+
+        # 3. Drop fully-empty rows
+        df.dropna(how="all", inplace=True)
+
+        # 4. Drop fully-empty columns
+        df.dropna(axis=1, how="all", inplace=True)
+
+        # 5. Coerce numeric-looking object columns
+        for col in df.select_dtypes(include=["object"]).columns:
+            try:
+                converted = pd.to_numeric(df[col], errors="coerce")
+                # Accept if ≥ 80 % of non-null values converted successfully
+                non_null = df[col].notna().sum()
+                if non_null > 0 and converted.notna().sum() / non_null >= 0.8:
+                    df[col] = converted
+            except Exception:
+                pass
+
+        # 6. Parse date-looking object columns
+        for col in df.select_dtypes(include=["object"]).columns:
+            sample = df[col].dropna().head(50)
+            if sample.empty:
+                continue
+            try:
+                parsed = pd.to_datetime(sample, errors="coerce")
+                if parsed.notna().sum() / len(sample) >= 0.8:
+                    df[col] = pd.to_datetime(df[col], errors="coerce")
+            except Exception:
+                pass
+
+        logger.info(
+            "Data cleaning complete",
+            original_shape=original_shape,
+            cleaned_shape=df.shape,
+            rows_dropped=original_shape[0] - df.shape[0],
+            cols_dropped=original_shape[1] - df.shape[1],
+        )
+        return df
+
     def extract_schema(self, df: pd.DataFrame, sample_size: int = 5) -> DatasetSchema:
         """
         Extract schema information from DataFrame.

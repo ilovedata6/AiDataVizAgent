@@ -153,13 +153,9 @@ class OpenAIClient:
                 "duration_seconds": duration,
             }
 
-        except RateLimitError as e:
-            logger.warning("Rate limit exceeded, retrying", error=str(e))
-            raise LLMRateLimitError("OpenAI rate limit exceeded. Retrying...") from e
-
-        except TimeoutError as e:
-            logger.warning("Request timeout, retrying", error=str(e))
-            raise LLMTimeoutError("OpenAI request timed out. Retrying...") from e
+        except (RateLimitError, TimeoutError):
+            # Let these propagate for tenacity to retry
+            raise
 
         except Exception as e:
             logger.error("LLM call failed", error=str(e), error_type=type(e).__name__)

@@ -12,6 +12,9 @@
 
 I created an intelligent data visualization agent that transforms natural language questions into interactive charts. Upload your CSV or XLSX files, ask questions in plain English, and watch as the AI generates beautiful, interactive visualizations powered by Plotly.
 
+![AI Data Viz Agent Interface](project_screenshot_0.png)
+*Main interface with file upload, smart suggestions, and interactive chat*
+
 ### ✨ Key Features
 
 - **🤖 Natural Language Interface**: I designed a chat-based UI where you can ask questions like "Show me monthly revenue by region" and get instant visualizations
@@ -67,6 +70,9 @@ streamlit run streamlit_frontend/app.py
 
 The application will open in your browser at `http://localhost:8501`.
 
+![Application Running](project_Screenshot_1.png)
+*Live Streamlit application with data profiling and visualization controls*
+
 ---
 
 ## 📖 Usage
@@ -91,6 +97,9 @@ The application will open in your browser at `http://localhost:8501`.
 "Show the distribution of customer ages"
 "Display revenue by region as a pie chart"
 ```
+
+![Interactive Visualization Example](project_screenshot2.png)
+*AI-generated interactive charts with download options and explanations*
 
 ---
 

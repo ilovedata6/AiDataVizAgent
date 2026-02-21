@@ -29,11 +29,18 @@ def render_plot_controls(
     st.sidebar.header("🎨 Plot Controls")
 
     with st.sidebar.expander("Edit Visualization", expanded=False):
+        # Get current chart type as string
+        current_chart_type = (
+            current_spec.chart_type.value 
+            if isinstance(current_spec.chart_type, ChartType) 
+            else current_spec.chart_type
+        )
+        
         # Chart type selector
         chart_type = st.selectbox(
             "Chart Type",
             options=[ct.value for ct in ChartType],
-            index=[ct.value for ct in ChartType].index(current_spec.chart_type.value),
+            index=[ct.value for ct in ChartType].index(current_chart_type),
         )
 
         # X and Y axis selectors
@@ -138,6 +145,8 @@ def render_export_controls(fig: Any, spec: VisualizationSpec) -> None:
         try:
             import plotly.graph_objects as go
 
+            ct_str = spec.chart_type if isinstance(spec.chart_type, str) else spec.chart_type.value
+
             if isinstance(fig, go.Figure):
                 # Plotly figure - can export as HTML or PNG
                 col1, col2 = st.columns(2)
@@ -147,7 +156,7 @@ def render_export_controls(fig: Any, spec: VisualizationSpec) -> None:
                     st.download_button(
                         "HTML",
                         data=html_buffer,
-                        file_name=f"chart_{spec.chart_type.value}.html",
+                        file_name=f"chart_{ct_str}.html",
                         mime="text/html",
                     )
 
@@ -158,7 +167,7 @@ def render_export_controls(fig: Any, spec: VisualizationSpec) -> None:
                         st.download_button(
                             "PNG",
                             data=img_bytes,
-                            file_name=f"chart_{spec.chart_type.value}.png",
+                            file_name=f"chart_{ct_str}.png",
                             mime="image/png",
                         )
                     except Exception:

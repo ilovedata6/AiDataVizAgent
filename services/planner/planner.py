@@ -24,49 +24,40 @@ logger = get_logger(__name__)
 
 
 # Prompt templates
-SYSTEM_PROMPT = """You are a data visualization expert assistant. Your job is to convert natural language requests into structured JSON visualization specifications.
+SYSTEM_PROMPT = """You are a data visualization expert. Convert natural language requests into a single JSON visualization specification.
 
-You MUST respond with ONLY valid JSON matching the VisualizationSpec schema. Do not include any explanatory text before or after the JSON.
-
-Supported chart types: line, bar, scatter, histogram, box, heatmap, pie, area
+RULES:
+1. Respond with ONLY a valid JSON object — no markdown fences, no commentary, no extra text.
+2. Use EXACT column names from the schema (case-sensitive).
+3. If the user asks for "top N" or "bottom N", set options.sort and options.limit.
+4. Pick the most appropriate chart_type from: line, bar, scatter, histogram, box, heatmap, pie, area
+5. When counting rows per category, set aggregate.func = "count" and use any column as y.
+6. For aggregations, always include aggregate.group_by with the grouping column(s).
+7. ALWAYS set "transformations" to an EMPTY array []. Never invent transformation types.
 
 Supported aggregation functions: sum, mean, count, median, min, max, std
-
 Supported filter operators: ==, !=, >, >=, <, <=, in, not in
 
-Supported transformations: log, log10, sqrt, abs, diff, pct_change, rolling_mean
-
-Example output format:
+RESPONSE FORMAT (nothing else):
 {
-  "chart_type": "line",
-  "x": "date",
-  "y": "revenue",
-  "aggregate": {"func": "sum", "group_by": ["region"]},
-  "filters": [{"column": "year", "op": ">=", "value": 2020}],
+  "chart_type": "<type>",
+  "x": "<column_name or null>",
+  "y": "<column_name or null>",
+  "aggregate": {"func": "<agg_function>", "group_by": ["<col>"]},
+  "filters": [],
   "transformations": [],
   "options": {
-    "title": "Monthly Revenue by Region",
+    "title": "<descriptive title>",
     "height": 600,
     "width": 900,
-    "color": "region"
+    "sort": "descending",
+    "limit": 10
   },
-  "explain": "Shows total revenue over time grouped by region"
+  "explain": "<one-line explanation>"
 }
 
-If a column doesn't exist or is ambiguous, respond with:
-{
-  "error": "column_not_found",
-  "message": "Column 'xyz' not found in dataset",
-  "candidates": ["column1", "column2"]
-}
-
-CRITICAL RULES:
-1. Output ONLY valid JSON, nothing else
-2. Column names must exactly match those in the dataset schema
-3. Never generate executable Python code
-4. Use simple, safe column references only
-5. If unsure, ask for clarification via error response
-"""
+If a column does not exist, respond ONLY with:
+{"error": "column_not_found", "message": "...", "candidates": ["col1","col2"]}"""
 
 
 def build_intent_prompt(
@@ -83,39 +74,73 @@ def build_intent_prompt(
     Returns:
         Formatted prompt string
     """
-    # Format schema info
+    # Format schema info with clear column names
     columns_info = []
     for col, dtype in schema.dtypes.items():
         missing = schema.missing_values.get(col, 0)
-        columns_info.append(f"  - {col} ({dtype}) - {missing} missing values")
+        columns_info.append(f"  - \"{col}\" (type: {dtype}, missing: {missing})")
 
     schema_text = "\n".join(columns_info)
 
-    # Format sample data
-    sample_text = "Sample rows:\n"
+    # Format sample data (show as table for clarity)
+    sample_text = "Sample data (first 3 rows):\n"
     for i, row in enumerate(schema.sample_rows[:3], 1):
-        sample_text += f"Row {i}: {row}\n"
+        sample_text += f"  Row {i}: {json.dumps(row, default=str)}\n"
 
     # Build context from chat history
     context_text = ""
     if chat_history and len(chat_history) > 0:
-        context_text = "\n\nPrevious conversation context:\n"
-        for msg in chat_history[-3:]:  # Last 3 messages
+        context_text = "\nRecent conversation:\n"
+        for msg in chat_history[-3:]:
             role = msg.get("role", "user")
-            content = msg.get("content", "")[:200]  # Truncate long messages
-            context_text += f"{role}: {content}\n"
+            content = msg.get("content", "")[:200]
+            context_text += f"  {role}: {content}\n"
 
-    prompt = f"""Dataset schema:
+    prompt = f"""AVAILABLE COLUMNS (use these exact names):
 {schema_text}
+
+Total rows: {schema.row_count}
 
 {sample_text}
 {context_text}
 
-User request: {user_query}
+User request: \"{user_query}\"
 
-Generate a VisualizationSpec JSON that fulfills this request. Remember: respond with ONLY the JSON, no extra text."""
+Respond with ONLY a JSON object — no markdown, no commentary."""
 
     return prompt
+
+
+SUGGESTIONS_SYSTEM_PROMPT = """You are a data analyst. Given a dataset schema and sample data, suggest exactly 4 specific and insightful visualization questions that someone would want to ask about THIS dataset.
+
+RULES:
+1. Each question must reference actual column names from the schema.
+2. Cover different chart types (bar, line, scatter, distribution).
+3. Questions should be natural and specific, not generic.
+4. Respond with ONLY a JSON array of 4 strings, nothing else.
+
+Example: ["What are the top 10 countries by total sales?", "How does revenue trend over time?", "What is the distribution of order values?", "How do sales compare across product categories?"]"""
+
+
+def build_suggestions_prompt(schema: DatasetSchema) -> str:
+    """Build prompt for generating data-specific suggestions."""
+    columns_info = []
+    for col, dtype in schema.dtypes.items():
+        columns_info.append(f"  - \"{col}\" ({dtype})")
+
+    sample_text = ""
+    for i, row in enumerate(schema.sample_rows[:3], 1):
+        sample_text += f"  Row {i}: {json.dumps(row, default=str)}\n"
+
+    return f"""Dataset has {schema.row_count} rows and {len(schema.columns)} columns.
+
+Columns:
+{chr(10).join(columns_info)}
+
+Sample data:
+{sample_text}
+
+Suggest 4 visualization questions for this data. Respond with ONLY a JSON array."""
 
 
 def build_refinement_prompt(
@@ -164,6 +189,37 @@ class VisualizationPlanner:
         self.llm_client = llm_client or OpenAIClient()
         logger.info("Visualization planner initialized")
 
+    # Valid transformation operations (must match TransformOperation enum)
+    _VALID_TRANSFORM_OPS = {"log", "log10", "sqrt", "abs", "diff", "pct_change", "rolling_mean"}
+
+    def _sanitize_spec(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Strip fields the LLM may hallucinate that would fail Pydantic validation.
+        - Remove transformation entries that don't match TransformSpec schema
+        - Remove unknown top-level keys
+        """
+        # Clean transformations: only keep items that have valid 'op' and 'column'
+        if "transformations" in data and isinstance(data["transformations"], list):
+            clean = []
+            for t in data["transformations"]:
+                if isinstance(t, dict) and t.get("op") in self._VALID_TRANSFORM_OPS and "column" in t:
+                    clean.append(t)
+                else:
+                    logger.warning("Dropped invalid transformation from LLM", transform=t)
+            data["transformations"] = clean
+
+        # Clean filters: only keep items that have 'column', 'op', 'value'
+        if "filters" in data and isinstance(data["filters"], list):
+            clean = []
+            for f in data["filters"]:
+                if isinstance(f, dict) and all(k in f for k in ("column", "op", "value")):
+                    clean.append(f)
+                else:
+                    logger.warning("Dropped invalid filter from LLM", filt=f)
+            data["filters"] = clean
+
+        return data
+
     def _extract_json_from_response(self, response: str) -> dict[str, Any]:
         """
         Extract JSON from LLM response.
@@ -178,35 +234,106 @@ class VisualizationPlanner:
         Raises:
             SpecValidationError: If JSON extraction fails
         """
-        # Try direct parse first
+        text = response.strip()
+
+        # Strategy 1: direct parse
         try:
-            return json.loads(response)
+            return json.loads(text)
         except json.JSONDecodeError:
             pass
 
-        # Try to find JSON in code blocks
-        json_pattern = r"```(?:json)?\s*(\{.*?\})\s*```"
-        matches = re.findall(json_pattern, response, re.DOTALL)
-        if matches:
+        # Strategy 2: markdown code blocks (```json ... ``` or ``` ... ```)
+        code_block = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL | re.IGNORECASE)
+        if code_block:
             try:
-                return json.loads(matches[0])
+                return json.loads(code_block.group(1))
             except json.JSONDecodeError:
                 pass
 
-        # Try to find any JSON object
-        json_pattern = r"\{.*\}"
-        matches = re.findall(json_pattern, response, re.DOTALL)
-        if matches:
-            for match in matches:
+        # Strategy 3: brace-counting parser — handles arbitrary nesting depth
+        candidates = self._find_json_objects(text)
+        # Prefer the longest match that validates as our spec
+        candidates.sort(key=len, reverse=True)
+        for candidate in candidates:
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict) and ("chart_type" in parsed or "error" in parsed):
+                    return parsed
+            except json.JSONDecodeError:
+                continue
+        # Retry candidates without key check (maybe the LLM used different keys)
+        for candidate in candidates:
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                continue
+
+        # Strategy 4: first '{' to last '}' (handles surrounding commentary)
+        first_brace = text.find("{")
+        last_brace = text.rfind("}")
+        if first_brace != -1 and last_brace > first_brace:
+            snippet = text[first_brace : last_brace + 1]
+            try:
+                return json.loads(snippet)
+            except json.JSONDecodeError:
+                # Try cleaning common issues (trailing commas, single quotes)
+                cleaned = self._clean_json_string(snippet)
                 try:
-                    return json.loads(match)
+                    return json.loads(cleaned)
                 except json.JSONDecodeError:
-                    continue
+                    pass
+
+        # Log the problematic response for debugging
+        logger.error("JSON extraction failed", response_preview=text[:500])
 
         raise SpecValidationError(
             "Could not extract valid JSON from LLM response",
-            details={"response": response[:500]},
+            details={"response": text[:500]},
         )
+
+    @staticmethod
+    def _find_json_objects(text: str) -> list[str]:
+        """Extract top-level JSON objects using a brace-counting scanner."""
+        objects: list[str] = []
+        i = 0
+        while i < len(text):
+            if text[i] == "{":
+                depth = 0
+                start = i
+                in_string = False
+                escape_next = False
+                while i < len(text):
+                    ch = text[i]
+                    if escape_next:
+                        escape_next = False
+                        i += 1
+                        continue
+                    if ch == "\\":
+                        escape_next = True
+                        i += 1
+                        continue
+                    if ch == '"':
+                        in_string = not in_string
+                    elif not in_string:
+                        if ch == "{":
+                            depth += 1
+                        elif ch == "}":
+                            depth -= 1
+                            if depth == 0:
+                                objects.append(text[start : i + 1])
+                                break
+                    i += 1
+            i += 1
+        return objects
+
+    @staticmethod
+    def _clean_json_string(s: str) -> str:
+        """Best-effort cleanup of malformed JSON strings from LLM output."""
+        # Remove trailing commas before } or ]
+        s = re.sub(r",\s*([}\]])", r"\1", s)
+        return s
 
     def plan(
         self,
@@ -246,6 +373,9 @@ class VisualizationPlanner:
                 error = SpecError(**json_data)
                 return PlannerResponse(spec=None, error=error, raw_llm_output=response), usage
 
+            # Sanitize: strip invalid transformations before validation
+            json_data = self._sanitize_spec(json_data)
+
             # Validate spec
             spec = VisualizationSpec(**json_data)
 
@@ -284,6 +414,70 @@ class VisualizationPlanner:
                     duration_seconds=0.0,
                 ),
             )
+
+    def generate_suggestions(self, schema: DatasetSchema) -> list[str]:
+        """
+        Generate data-specific visualization question suggestions using LLM.
+
+        Args:
+            schema: Dataset schema
+
+        Returns:
+            List of 3-4 natural-language question suggestions
+        """
+        logger.info("Generating smart suggestions for dataset")
+
+        prompt = build_suggestions_prompt(schema)
+
+        try:
+            response, _ = self.llm_client.complete(
+                prompt=prompt,
+                system_prompt=SUGGESTIONS_SYSTEM_PROMPT,
+            )
+
+            # Parse JSON array from response
+            raw = response.strip()
+
+            # Try direct parse
+            try:
+                suggestions = json.loads(raw)
+            except json.JSONDecodeError:
+                # Try to find array in response
+                match = re.search(r'\[.*?\]', raw, re.DOTALL)
+                if match:
+                    suggestions = json.loads(match.group())
+                else:
+                    raise ValueError("No JSON array found in response")
+
+            if isinstance(suggestions, list) and len(suggestions) >= 1:
+                return [str(s) for s in suggestions[:4]]
+
+            return []
+
+        except Exception as e:
+            logger.warning(f"LLM suggestion generation failed, using profiler fallback: {e}")
+            return self._fallback_suggestions(schema)
+
+    @staticmethod
+    def _fallback_suggestions(schema: DatasetSchema) -> list[str]:
+        """Generate basic suggestions from schema when LLM fails."""
+        suggestions: list[str] = []
+        numeric = [c for c, d in schema.dtypes.items() if "int" in d or "float" in d]
+        text = [c for c, d in schema.dtypes.items() if "object" in d or "str" in d]
+        dates = [c for c, d in schema.dtypes.items() if "datetime" in d]
+
+        if numeric:
+            suggestions.append(f"Show the distribution of {numeric[0]}")
+        if text and numeric:
+            suggestions.append(f"Compare average {numeric[0]} by {text[0]}")
+        if dates and numeric:
+            suggestions.append(f"How does {numeric[0]} trend over {dates[0]}?")
+        if len(numeric) >= 2:
+            suggestions.append(f"Show the relationship between {numeric[0]} and {numeric[1]}")
+        if text:
+            suggestions.append(f"What are the top 10 {text[0]} by count?")
+
+        return suggestions[:4]
 
     def refine(
         self,

@@ -106,6 +106,8 @@ class ChartOptions(BaseModel):
     show_legend: bool = Field(default=True, description="Whether to show legend")
     log_x: bool = Field(default=False, description="Use log scale for x-axis")
     log_y: bool = Field(default=False, description="Use log scale for y-axis")
+    sort: str | None = Field(default=None, description="Sort order: ascending or descending")
+    limit: int | None = Field(default=None, ge=1, le=10000, description="Limit number of data points shown")
 
 
 class VisualizationSpec(BaseModel):
@@ -137,15 +139,17 @@ class VisualizationSpec(BaseModel):
     @field_validator("x", "y")
     @classmethod
     def validate_column_names(cls, v: str | None) -> str | None:
-        """Ensure column names don't contain dangerous characters."""
+        """Ensure column names don't contain code-injection patterns."""
         if v is None:
             return v
 
-        # Disallow special characters that could be used for injection
-        dangerous_chars = [";", "(", ")", "[", "]", "{", "}", "__", "eval", "exec"]
-        for char in dangerous_chars:
-            if char in v:
-                raise ValueError(f"Column name cannot contain '{char}'")
+        # Only block actual code-injection patterns, NOT normal punctuation
+        dangerous_patterns = ["eval(", "exec(", "import ", "__import__", "compile(",
+                              "globals(", "locals(", "getattr(", "setattr("]
+        v_lower = v.lower()
+        for pattern in dangerous_patterns:
+            if pattern in v_lower:
+                raise ValueError(f"Column name cannot contain '{pattern}'")
 
         return v
 

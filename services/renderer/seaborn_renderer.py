@@ -93,12 +93,13 @@ class SeabornRenderer:
             Matplotlib Figure
         """
         opts = spec.options
+        ct = spec.chart_type.value if hasattr(spec.chart_type, "value") else str(spec.chart_type)
 
         # Create figure
         fig, ax = plt.subplots(figsize=(opts.width / 100, opts.height / 100))
 
         # Chart-specific rendering
-        if spec.chart_type.value == "line":
+        if ct == "line":
             if opts.color and opts.color in df.columns:
                 for group in df[opts.color].unique():
                     subset = df[df[opts.color] == group]
@@ -107,19 +108,19 @@ class SeabornRenderer:
             else:
                 ax.plot(df[spec.x], df[spec.y], marker="o")
 
-        elif spec.chart_type.value == "bar":
+        elif ct == "bar":
             if opts.color and opts.color in df.columns:
                 sns.barplot(data=df, x=spec.x, y=spec.y, hue=opts.color, ax=ax)
             else:
                 sns.barplot(data=df, x=spec.x, y=spec.y, ax=ax)
 
-        elif spec.chart_type.value == "scatter":
+        elif ct == "scatter":
             if opts.color and opts.color in df.columns:
                 sns.scatterplot(data=df, x=spec.x, y=spec.y, hue=opts.color, ax=ax)
             else:
                 sns.scatterplot(data=df, x=spec.x, y=spec.y, ax=ax)
 
-        elif spec.chart_type.value == "histogram":
+        elif ct == "histogram":
             if opts.color and opts.color in df.columns:
                 for group in df[opts.color].unique():
                     subset = df[df[opts.color] == group]
@@ -128,20 +129,20 @@ class SeabornRenderer:
             else:
                 ax.hist(df[spec.x], bins=30)
 
-        elif spec.chart_type.value == "box":
+        elif ct == "box":
             if opts.color and opts.color in df.columns:
                 sns.boxplot(data=df, x=spec.x, y=spec.y, hue=opts.color, ax=ax)
             else:
                 sns.boxplot(data=df, x=spec.x, y=spec.y, ax=ax)
 
-        elif spec.chart_type.value == "heatmap":
+        elif ct == "heatmap":
             if spec.x and spec.y:
                 pivot = df.pivot_table(values=spec.y, index=spec.x, aggfunc="mean")
                 sns.heatmap(pivot, annot=True, fmt=".2f", ax=ax)
             else:
                 raise RenderError("Heatmap requires both x and y columns")
 
-        elif spec.chart_type.value == "area":
+        elif ct == "area":
             if opts.color and opts.color in df.columns:
                 for group in df[opts.color].unique():
                     subset = df[df[opts.color] == group]
@@ -151,7 +152,7 @@ class SeabornRenderer:
                 ax.fill_between(df[spec.x], df[spec.y], alpha=0.5)
 
         else:
-            raise RenderError(f"Unsupported chart type for Seaborn: {spec.chart_type}")
+            raise RenderError(f"Unsupported chart type for Seaborn: {ct}")
 
         # Apply labels and title
         ax.set_xlabel(opts.xlabel or spec.x or "")
