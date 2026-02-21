@@ -2,7 +2,7 @@
 
 **An AI-powered data visualization platform built with Streamlit, OpenAI, and Python tooling.**
 
-[![CI/CD](https://github.com/yourorg/ai-data-viz-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/yourorg/ai-data-viz-agent/actions/workflows/ci.yml)
+
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
